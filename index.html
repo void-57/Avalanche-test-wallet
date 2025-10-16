@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AVAX Wallet </title>
+    <link rel="stylesheet" href="style.css">
+    <script src="lib.avax.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.2/src/sha3.min.js"></script>
+
+    <script src="avaxCrypto.js"></script>
+  </head>
+  <body>
+    <h2>Generate or Recover Address</h2>
+    <input id="inputKey" placeholder="Enter Private Key (optional)" size="60" />
+    <button id="generateBtn">Generate / Recover</button>
+
+    <pre id="output"></pre>
+
+    <script>
+      document.getElementById("generateBtn").onclick = async () => {
+        const input = document.getElementById("inputKey").value.trim();
+        const result = await avaxCrypto.generateMultiChain(input);
+        document.getElementById("output").textContent = JSON.stringify(result, null, 2);
+      };
+    </script>
+  </body>
+</html>
