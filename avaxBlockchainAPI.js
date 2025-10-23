@@ -137,10 +137,6 @@ async function prepareAvalancheTransaction(
     privateKey = wallet.AVAX.privateKey;
     console.log(privateKey);
 
-  
-
-
-
     if (privateKey.length !== 64 || !/^[0-9a-fA-F]+$/.test(privateKey)) {
       throw new Error(
         "Invalid private key format. Must be 64 hexadecimal characters."
@@ -184,19 +180,30 @@ async function prepareAvalancheTransaction(
   }
 }
 
-async function fetchAvalancheTxHistory(address, limit = 50) {
-  const url = `https://deep-index.moralis.io/api/v2.2/wallets/${address}/history?chain=avalanche&order=DESC&limit=${limit}`;
-  const resp = await fetch(url, {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      "X-API-Key":
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjQ0NTE4YzQxLThjMzQtNGUxMC05ZDM4LTE0NmQ5ZDgyODI3ZiIsIm9yZ0lkIjoiNDc2NTcwIiwidXNlcklkIjoiNDkwMjk1IiwidHlwZUlkIjoiNjVkY2Q3ZmYtODBmNy00YTQ5LTllZGQtZTc5Y2EzMjQ5NDYxIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NjA4MDU4OTUsImV4cCI6NDkxNjU2NTg5NX0.M9TZc4C1PDsh_HatUeDSmgq5dryhm1APFFeiBNRVvVw",
-    },
-  });
-  const data = await resp.json();
-  if (!resp.ok) {
-    throw new Error(`Moralis API error: ${data?.message || resp.status}`);
+// Fetch transaction history with pagination support
+async function fetchAvalancheTxHistory(address, page = 1, pageSize = 10) {
+  try {
+    const url = `https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=${page}&offset=${pageSize}&sort=desc`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.status !== "1") {
+      if (data.message === "No transactions found") {
+        return { transactions: [], hasMore: false };
+      }
+      throw new Error(data.message || "Failed to fetch transaction history");
+    }
+
+    const transactions = data.result || [];
+    const hasMore = transactions.length === pageSize;
+
+    return {
+      transactions: transactions,
+      hasMore: hasMore,
+    };
+  } catch (error) {
+    console.error("Error fetching transaction history:", error);
+    throw error;
   }
-  return data.result;
 }

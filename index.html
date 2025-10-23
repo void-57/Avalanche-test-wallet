@@ -159,10 +159,10 @@
       }
 
       // Pagination state
-      let allTransactions = [];
       let currentPage = 1;
       const transactionsPerPage = 10;
       let currentAddress = "";
+      let hasMoreTransactions = false;
 
       // Generate or recover wallet
       document.getElementById("generateBtn").onclick = async () => {
@@ -197,8 +197,7 @@
 
           const balance = await getBalanceRPC(address);
 
-          const result =  balance.avax;
-          
+          const result = balance.avax;
 
           document.getElementById("balanceOutput").textContent = JSON.stringify(
             result,
@@ -233,56 +232,12 @@
           document.getElementById("historyBtn").disabled = true;
           document.getElementById("historyBtn").textContent = "Loading...";
 
-          // Reset pagination when loading new address
+          // Reset to page 1 when loading new address
           currentAddress = address;
           currentPage = 1;
-          allTransactions = [];
 
-          // Fetch a larger batch of transactions (up to 100)
-          const transactions = await fetchAvalancheTxHistory(address, 100);
-
-          if (!transactions || transactions.length === 0) {
-            document.getElementById("historyOutput").textContent =
-              "No transactions found for this address.";
-            document.getElementById("paginationControls").style.display =
-              "none";
-            return;
-          }
-
-          // Format all transactions
-          allTransactions = transactions.map((tx) => {
-            let transactionValue = "0";
-
-            if (tx.native_transfers && tx.native_transfers.length > 0) {
-              // Use native transfers value if available
-              transactionValue = tx.native_transfers[0].value || "0";
-            } else if (tx.value) {
-              // Use direct value field if available
-              transactionValue = tx.value;
-            } else if (tx.amount) {
-              // Use amount field if available
-              transactionValue = tx.amount;
-            }
-
-            return {
-              hash: tx.hash,
-              from: tx.from_address,
-              to: tx.to_address,
-              value: weiToAvax(transactionValue),
-              block: tx.block_number,
-              timestamp: tx.block_timestamp,
-              gas_used: tx.gas_used,
-              gas_price: tx.gas_price,
-              category: tx.category,
-              summary: tx.summary,
-            };
-          });
-
-          // Show pagination controls
-          document.getElementById("paginationControls").style.display = "block";
-
-          // Display first page
-          displayCurrentPage();
+          // Fetch first page of transactions
+          await loadTransactionPage();
         } catch (error) {
           document.getElementById(
             "historyOutput"
@@ -294,22 +249,46 @@
         }
       };
 
-      // Function to display current page of transactions
-      function displayCurrentPage() {
-        const startIndex = (currentPage - 1) * transactionsPerPage;
-        const endIndex = startIndex + transactionsPerPage;
-        const pageTransactions = allTransactions.slice(startIndex, endIndex);
+      // Function to load a specific page of transactions
+      async function loadTransactionPage() {
+        try {
+          // Fetch transactions for current page
+          const result = await fetchAvalancheTxHistory(
+            currentAddress,
+            currentPage,
+            transactionsPerPage
+          );
 
-        const totalPages = Math.ceil(
-          allTransactions.length / transactionsPerPage
-        );
+          const transactions = result.transactions;
+          hasMoreTransactions = result.hasMore;
+
+          if (!transactions || transactions.length === 0) {
+            document.getElementById("historyOutput").textContent =
+              "No transactions found for this address.";
+            document.getElementById("paginationControls").style.display =
+              "none";
+            return;
+          }
+
+          // Display transactions
+          displayTransactions(transactions);
+
+          // Show and update pagination controls
+          document.getElementById("paginationControls").style.display = "block";
+          updatePaginationControls(transactions.length);
+        } catch (error) {
+          document.getElementById(
+            "historyOutput"
+          ).textContent = `Error: ${error.message}`;
+          document.getElementById("paginationControls").style.display = "none";
+        }
+      }
+
+      function displayTransactions(transactions) {
         let html = `
           <div class="transaction-summary">
             <h3>Transaction History for ${currentAddress}</h3>
-            <p>Showing ${startIndex + 1}-${Math.min(
-          endIndex,
-          allTransactions.length
-        )} of ${allTransactions.length} transactions</p>
+            <p>Page ${currentPage} - Showing ${transactions.length} transactions</p>
           </div>
           <table class="transaction-table">
             <thead>
@@ -324,7 +303,7 @@
             <tbody>
         `;
 
-        pageTransactions.forEach((tx) => {
+        transactions.forEach((tx) => {
           // Format addresses
           const fromFormatted = tx.from
             ? `${tx.from.substring(0, 6)}...${tx.from.substring(
@@ -342,8 +321,8 @@
 
           // Format date and time in IST
           let dateTimeIST = "N/A";
-          if (tx.timestamp) {
-            const date = new Date(tx.timestamp);
+          if (tx.timeStamp) {
+            const date = new Date(parseInt(tx.timeStamp) * 1000);
             // Convert to IST
             const istOptions = {
               timeZone: "Asia/Kolkata",
@@ -358,10 +337,9 @@
             dateTimeIST = date.toLocaleString("en-IN", istOptions);
           }
 
-          const amount =
-            tx.value && parseFloat(tx.value) > 0
-              ? parseFloat(tx.value).toFixed(6)
-              : "0.000000";
+          // Convert Wei to AVAX
+          const value = tx.value ? parseFloat(tx.value) / 1e18 : 0;
+          const amount = value > 0 ? value.toFixed(6) : "0.000000";
 
           html += `
             <tr>
@@ -382,39 +360,33 @@
         `;
 
         document.getElementById("historyOutput").innerHTML = html;
+      }
 
-        // Update pagination controls
+      // update pagination controls
+      function updatePaginationControls(txCount) {
+        document.getElementById("pageInfo").textContent = `Page ${currentPage}`;
         document.getElementById(
-          "pageInfo"
-        ).textContent = `Page ${currentPage} of ${totalPages}`;
-        document.getElementById("currentCount").textContent = `${
-          startIndex + 1
-        }-${Math.min(endIndex, allTransactions.length)} of ${
-          allTransactions.length
-        }`;
+          "currentCount"
+        ).textContent = `Showing ${txCount} transactions`;
 
         // Update button states
         document.getElementById("prevBtn").disabled = currentPage === 1;
-        document.getElementById("nextBtn").disabled =
-          currentPage === totalPages;
+        document.getElementById("nextBtn").disabled = !hasMoreTransactions;
       }
 
       // Previous button handler
-      document.getElementById("prevBtn").onclick = () => {
+      document.getElementById("prevBtn").onclick = async () => {
         if (currentPage > 1) {
           currentPage--;
-          displayCurrentPage();
+          await loadTransactionPage();
         }
       };
 
       // Next button handler
-      document.getElementById("nextBtn").onclick = () => {
-        const totalPages = Math.ceil(
-          allTransactions.length / transactionsPerPage
-        );
-        if (currentPage < totalPages) {
+      document.getElementById("nextBtn").onclick = async () => {
+        if (hasMoreTransactions) {
           currentPage++;
-          displayCurrentPage();
+          await loadTransactionPage();
         }
       };
 
@@ -423,8 +395,7 @@
           .getElementById("senderPrivateKey")
           .value.trim();
 
-        
-        // Support FLO/BTC/AVAX private keys 
+        // Support FLO/BTC/AVAX private keys
         if (privateKey.length >= 51 && privateKey.length <= 66) {
           try {
             // Test if the private key can generate a wallet
@@ -473,11 +444,10 @@
         }
 
         try {
-          
           document.getElementById("sendBtn").disabled = true;
           document.getElementById("sendBtn").textContent = "Sending...";
 
-          // Prepare transaction data 
+          // Prepare transaction data
           const preparedTx = await prepareAvalancheTransaction(
             privateKey,
             recipient,
