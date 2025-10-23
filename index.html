@@ -365,9 +365,7 @@
       // update pagination controls
       function updatePaginationControls(txCount) {
         document.getElementById("pageInfo").textContent = `Page ${currentPage}`;
-        document.getElementById(
-          "currentCount"
-        ).textContent = `Showing ${txCount} transactions`;
+        document.getElementById("currentCount").textContent = `${txCount}`;
 
         // Update button states
         document.getElementById("prevBtn").disabled = currentPage === 1;
